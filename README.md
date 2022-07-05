@@ -1,2 +1,2 @@
-# cie-git-submodules
-CIE pipeline with git submodules
+# platform
+CIE pipeline - Platform build with git submodules
