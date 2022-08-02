@@ -51,19 +51,15 @@ pipeline:
                                     shell: Sh
                                     command: <+input>
                           - step:
-                                type: BuildAndPushDockerRegistry
-                                name: DockerHub - Build and Push
-                                identifier: Build_and_push_image_to_DockerHub
+                                type: BuildAndPushECR
+                                name: Build and Push to ECR
+                                identifier: Build_and_Push_to_ECR
                                 spec:
                                     connectorRef: <+input>
-                                    repo: <+input>
-                                    tags:
-                                        - 1.<+pipeline.sequenceId>
-                                    optimize: true
-                                    resources:
-                                        limits:
-                                            memory: 1000Mi
-                                            cpu: "1"
+                                    region: <+input>
+                                    account: <+input>
+                                    imageName: <+input>
+                                    tags: <+input>
                   infrastructure:
                       type: KubernetesDirect
                       spec:
@@ -74,7 +70,6 @@ pipeline:
                           os: Linux
                   sharedPaths:
                       - /var/run
-              variables: []
               failureStrategies:
                   - onFailure:
                         errors:
