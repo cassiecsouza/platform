@@ -1,0 +1,194 @@
+inputSet:
+  identifier: "testinputset"
+  pipeline:
+    identifier: "Platform_Demo"
+    properties:
+      ci:
+        codebase:
+          connectorRef: "account.github"
+          repoName: "platform"
+          build:
+            type: "branch"
+            spec:
+              branch: "platform-demo"
+    stages:
+    - stage:
+        identifier: "Test_Build_and_Push"
+        type: "CI"
+        spec:
+          execution:
+            steps:
+            - step:
+                identifier: "runTestsWithIntelligence"
+                type: "RunTests"
+                spec:
+                  connectorRef: "account.harnessImage"
+            - step:
+                identifier: "Build_Java_App"
+                type: "Run"
+                spec:
+                  connectorRef: "GCP"
+                  image: "nginx"
+                  command: "echo \"hello\""
+            - step:
+                identifier: "Build_and_Push_to_ECR"
+                type: "BuildAndPushECR"
+                spec:
+                  connectorRef: ""
+                  region: ""
+                  account: ""
+                  imageName: ""
+                  tags: ""
+          infrastructure:
+            type: "KubernetesDirect"
+            spec:
+              connectorRef: "gcpkube"
+              namespace: "build"
+    - stage:
+        identifier: "Deploy"
+        type: "Deployment"
+        spec:
+          infrastructure:
+            infrastructureDefinition:
+              type: "KubernetesDirect"
+              spec:
+                connectorRef: ""
+          execution:
+            steps:
+            - stepGroup:
+                identifier: "Terraform_Plan_and_Apply"
+                steps:
+                - step:
+                    identifier: "TF_Plan_S3"
+                    type: "TerraformPlan"
+                    spec:
+                      provisionerIdentifier: ""
+                - step:
+                    identifier: "TF_Apply_S3"
+                    type: "TerraformApply"
+                    spec:
+                      provisionerIdentifier: ""
+            - step:
+                identifier: "Open_Jira_Ticket"
+                type: "JiraCreate"
+                spec:
+                  connectorRef: ""
+                  projectKey: ""
+                  issueType: ""
+            - step:
+                identifier: "Update_JIRA"
+                type: "JiraUpdate"
+                spec:
+                  connectorRef: ""
+                  issueKey: ""
+                  transitionTo:
+                    status: ""
+          serviceConfig:
+            serviceRef: ""
+            serviceDefinition:
+              type: "Kubernetes"
+              spec:
+                artifacts:
+                  primary:
+                    type: "DockerRegistry"
+                    spec:
+                      connectorRef: ""
+                      imagePath: ""
+                      tag: ""
+                manifests:
+                - manifest:
+                    identifier: "demo-chart"
+                    type: "HelmChart"
+                    spec:
+                      store:
+                        type: "Github"
+                        spec:
+                          connectorRef: ""
+                          folderPath: ""
+                          repoName: ""
+                          branch: ""
+                      valuesPaths: ""
+    - stage:
+        identifier: "Deploy_to_QA"
+        type: "Deployment"
+        spec:
+          execution:
+            steps:
+            - step:
+                identifier: "Update_JIRA"
+                type: "JiraUpdate"
+                spec:
+                  connectorRef: ""
+                  issueKey: ""
+                  transitionTo:
+                    status: ""
+            - step:
+                identifier: "Update_Jira"
+                type: "JiraUpdate"
+                spec:
+                  connectorRef: ""
+                  issueKey: ""
+                  transitionTo:
+                    status: ""
+          infrastructure:
+            infrastructureDefinition:
+              type: "KubernetesDirect"
+              spec:
+                connectorRef: ""
+    - stage:
+        identifier: "Approval"
+        type: "Approval"
+        spec:
+          execution:
+            steps:
+            - step:
+                identifier: "jiraApproval"
+                type: "JiraApproval"
+                spec:
+                  connectorRef: ""
+                  issueKey: ""
+    - stage:
+        identifier: "Deploy_to_Prod"
+        type: "Deployment"
+        spec:
+          execution:
+            steps:
+            - step:
+                identifier: "Update_JIRA"
+                type: "JiraUpdate"
+                spec:
+                  connectorRef: ""
+                  issueKey: ""
+                  transitionTo:
+                    status: ""
+            - stepGroup:
+                identifier: "canaryDepoyment"
+                steps:
+                - parallel:
+                  - step:
+                      identifier: "Postman_HTTP_Check"
+                      type: "Http"
+                      spec:
+                        url: ""
+            - stepGroup:
+                identifier: "TF_CleanUp"
+                steps:
+                - parallel:
+                  - step:
+                      identifier: "Tf_Destroy_S3"
+                      type: "TerraformDestroy"
+                      spec:
+                        provisionerIdentifier: ""
+                  - step:
+                      identifier: "TF_Destroy_AzBlob"
+                      type: "TerraformDestroy"
+                      spec:
+                        provisionerIdentifier: ""
+          infrastructure:
+            infrastructureDefinition:
+              type: "KubernetesDirect"
+              spec:
+                connectorRef: ""
+  name: "test-inputset"
+  orgIdentifier: "default"
+  projectIdentifier: "GitX"
