@@ -1,5 +1,5 @@
 pipeline:
-    name: Platform-Demo
+    name: Platform Demo
     identifier: Platform_Demo
     allowStageExecutions: false
     properties:
@@ -21,7 +21,7 @@ pipeline:
                                 name: Run Tests with Intelligence
                                 identifier: runTestsWithIntelligence
                                 spec:
-                                    connectorRef: dockerhub
+                                    connectorRef: <+input>
                                     image: maven:3.5.2-jdk-8-alpine
                                     language: Java
                                     buildTool: Maven
@@ -45,357 +45,35 @@ pipeline:
                                 name: Build Java App
                                 identifier: Build_Java_App
                                 spec:
-                                    connectorRef: account.Harness_Docker_Connector
-                                    image: maven:3.5.2-jdk-8-alpine
+                                    connectorRef: <+input>
+                                    image: <+input>
                                     shell: Sh
-                                    command: |
-                                        mvn clean package -DskipTests
-                          - parallel:
-                                - step:
-                                      type: Security
-                                      name: OWASP
-                                      identifier: OWASP
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              policy_type: orchestratedScan
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: <+codebase.branch>
-                                              product_name: owasp
-                                              product_config_name: default
-                                              fail_on_severity: HIGH
-                                          imagePullPolicy: Always
-                                          resources:
-                                              limits:
-                                                  memory: 2048Mi
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Fortify
-                                      identifier: fortify
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: fortify
-                                              product_config_name: fortify-default
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: main
-                                              customer_artifacts_path: sto_tests/scan_tools/fortify/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Checkmarx
-                                      identifier: checkmarx
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: checkmarx
-                                              product_config_name: checkmarx
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: dev
-                                              customer_artifacts_path: sto_tests/scan_tools/checkmarx/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Sonar_STO
-                                      identifier: Sonar_Scan_Vulnerabilities
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_branch: main
-                                              product_name: sonarqube
-                                              product_access_token: 9be106a1849c3b98f5beb1cc4b916674432944e0
-                                              product_project_name: jhttp_isolated
-                                              product_project_key: jhttp_isolated
-                                              product_domain: http://sonar.harness-demo.site
-                                              product_config_name: sonarqube-agent
-                                              product_lookup_type: byKey
-                                              repository_project: jhttp_isolated
-                                              customer_artifacts_path: sto_tests/scan_tools/sonarqube/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      when:
-                                          stageStatus: Success
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                - step:
-                                      type: Run
-                                      name: GH - Comment PR
-                                      identifier: Update_PR_Ticket
-                                      spec:
-                                          connectorRef: docker_danf425
-                                          image: curlimages/curl:7.82.0
-                                          shell: Sh
-                                          command: |-
-                                              curl -s -H 'Authorization: token  <+secrets.getValue("danf_gh_pat")>' \
-                                               -X POST -d '{"body": "Java Build was successful. Build Trigger based on PR:<+trigger.prNumber>. Harness_Execution_ID:<+pipeline.executionId>. Security Scans are Starting"}' \
-                                               'https://api.github.com/repos/danf425/jhttp_isolated/issues/<+trigger.prNumber>/comments'
-                          - parallel:
-                                - step:
-                                      type: BuildAndPushDockerRegistry
-                                      name: DockerHub - Build and Push
-                                      identifier: Build_and_push_image_to_DockerHub
-                                      spec:
-                                          connectorRef: docker_danf425
-                                          repo: dmontanez/jhttpz_isolated
-                                          tags:
-                                              - 1.<+pipeline.sequenceId>
-                                          optimize: true
-                                          resources:
-                                              limits:
-                                                  memory: 1000Mi
-                                                  cpu: "1"
-                                - step:
-                                      type: BuildAndPushDockerRegistry
-                                      name: Artifactory - Build and Push
-                                      identifier: Artifactory_Build_and_Push
-                                      spec:
-                                          connectorRef: artifactory_danf425
-                                          repo: danf425.jfrog.io/default-docker-virtual/jhttpz_isolated
-                                          tags:
-                                              - 1.<+pipeline.sequenceId>
-                                - step:
-                                      type: Run
-                                      name: DockerBuild_Skipped
-                                      identifier: Docker_Build
-                                      spec:
-                                          connectorRef: docker_danf425
-                                          image: docker:latest
-                                          shell: Sh
-                                          command: docker build . -t jhttpz_isolated:local
-                                      failureStrategies: []
-                                      when:
-                                          stageStatus: Failure
-                                - step:
-                                      type: Run
-                                      name: "PR Status - SonarQube "
-                                      identifier: Update_PR_SonarQube_Status
-                                      spec:
-                                          connectorRef: docker_danf425
-                                          image: curlimages/curl:7.82.0
-                                          shell: Sh
-                                          command: |-
-                                              curl -i -u danf425:<+secrets.getValue("danf_gh_pat")> \
-                                                -X POST \
-                                                -H "Accept: application/vnd.github.v3+json" \
-                                                https://api.github.com/repos/danf425/jhttp_isolated/statuses/<+codebase.commitSha> \
-                                                -d '{"state":"success","target_url":"https://thesonarqubescanlink.coms","description":"sonarqube scan passed","context":"harness-ci/sonarqube"}'
-                          - parallel:
-                                - step:
-                                      type: Security
-                                      name: Veracode
-                                      identifier: veracode
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: veracode
-                                              product_config_name: veracode-agent
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: dev
-                                              customer_artifacts_path: sto_tests/scan_tools/veracode/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Aqua
-                                      identifier: Aqua2
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: aqua-trivy
-                                              product_config_name: aqua-trivy
-                                              policy_type: manualUpload
-                                              scan_type: container
-                                              container_type: local_image
-                                              container_domain: docker.io
-                                              container_project: nodegoat
-                                              container_tag: local
-                                              fail_on_severity: HIGH
-                                              customer_artifacts_path: sto_tests/scan_tools/aqua_trivy/test_data
-                                              manual_upload_filename: "005"
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Run
-                                      name: Build Provenance
-                                      identifier: buildProvenance
-                                      spec:
-                                          connectorRef: cluccaDockerhub
-                                          image: clucca13/zn:latest
-                                          command: |-
-                                              echo "{
-                                                "_type": "https://in-toto.io/Statement/v0.1",
-                                                "subject": [
-                                                  {
-                                                    "name": "jhttp",
-                                                    "digest": {
-                                                      "sha256": "f8161d035cdf328c7bb124fce192cb90b603f34ca78d73e33b736b4f6bddf993"
-                                                    }
-                                                  }
-                                                ],
-                                                "predicateType": "https://slsa.dev/provenance/v0.1",
-                                                "predicate": {
-                                                  "builder": {
-                                                    "id": "<+pipeline.name>"
-                                                  },
-                                                  "metadata": {
-                                                    "buildInvocationId": "https:/#/app.harness.io/ng/account/6_vVHzo9Qeu9fXvj-AcbCQ/ci/orgs/default/projects/Demo_Sandbox/pipelines/jhttpND/executions/<+pipeline.executionId>",
-                                                    "completeness": {
-                                                      "arguments": true,
-                                                      "environment": false,
-                                                      "materials": false
-                                                    },
-                                                    "reproducible": false,
-                                                    "buildFinishedOn": "<+pipeline.startTs>"
-                                                  },
-                                                  "pipeline": {
-                                                    "type": "https://app.harness.io/ng/#/account/6_vVHzo9Qeu9fXvj-AcbCQ/ci/orgs/default/projects/Demo_Sandbox/pipelines/jhttpND/pipeline-studio/<+pipeline.sequenceId>",
-                                                    "definedInMaterial": 0,
-                                                    "entryPoint": "Create a sample provenance",
-                                                    "arguments": null,
-                                                    "environment": <+project.name>
-                                                  },
-                                                  "materials": [
-                                                    {
-                                                      "uri": "git+<+codebase.repoUrl>",
-                                                      "digest": {
-                                                        "sha1": "<+codebase.commitSha>"
-                                                      }
-                                                    }
-                                                  ]
-                                                }
-                                              }" >> provenance.yaml
-                                              cat provenance.yaml
-                                          privileged: false
-                                - step:
-                                      type: Security
-                                      name: Aqua_Skipped
-                                      identifier: Aqua
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: aqua-trivy
-                                              product_config_name: aqua-trivy
-                                              policy_type: orchestratedScan
-                                              scan_type: container
-                                              container_type: local_image
-                                              container_domain: docker.io
-                                              container_project: jhttpz_isolated
-                                              container_tag: local
-                                              fail_on_severity: HIGH
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Failure
-                                      description: Actual execution of aqua but it's the missing anchor
+                                    command: <+input>
                           - step:
-                                type: Run
-                                name: PR Status - Aqua
-                                identifier: PR_Status_Aqua
+                                type: BuildAndPushDockerRegistry
+                                name: DockerHub - Build and Push
+                                identifier: Build_and_push_image_to_DockerHub
                                 spec:
-                                    connectorRef: docker_danf425
-                                    image: curlimages/curl:7.82.0
-                                    shell: Sh
-                                    command: |-
-                                        curl -i -u danf425:<+secrets.getValue("danf_gh_pat")> \
-                                          -X POST \
-                                          -H "Accept: application/vnd.github.v3+json" \
-                                          https://api.github.com/repos/danf425/jhttp_isolated/statuses/<+codebase.commitSha> \
-                                          -d '{"state":"success","target_url":"https://theaquascanlink.coms","description":"Aqua scan passed","context":"harness-ci/aqua"}'
+                                    connectorRef: <+input>
+                                    repo: <+input>
+                                    tags:
+                                        - 1.<+pipeline.sequenceId>
+                                    optimize: true
+                                    resources:
+                                        limits:
+                                            memory: 1000Mi
+                                            cpu: "1"
                   infrastructure:
                       type: KubernetesDirect
                       spec:
-                          connectorRef: ciDemo
-                          namespace: build
+                          connectorRef: <+input>
+                          namespace: <+input>
                           automountServiceAccountToken: true
                           nodeSelector: {}
                           os: Linux
-                  serviceDependencies:
-                      - identifier: dind
-                        name: dind
-                        type: Service
-                        spec:
-                            connectorRef: account.Harness_Docker_Connector
-                            image: docker:dind
-                            privileged: true
-                            resources:
-                                limits:
-                                    memory: 2048Mi
-                                    cpu: 1000m
                   sharedPaths:
                       - /var/run
-              variables:
-                  - name: sto_api_key
-                    type: Secret
-                    value: sto_api_key
-                  - name: sto_dump_runner_logs
-                    type: String
-                    value: "true"
+              variables: []
               failureStrategies:
                   - onFailure:
                         errors:
@@ -413,7 +91,7 @@ pipeline:
                       infrastructureDefinition:
                           type: KubernetesDirect
                           spec:
-                              connectorRef: gcpkube
+                              connectorRef: <+input>
                               namespace: e2e-dev
                               releaseName: release-<+INFRA_KEY>
                       allowSimultaneousDeployments: true
@@ -423,92 +101,49 @@ pipeline:
                                 name: Terraform Plan and Apply
                                 identifier: Terraform_Plan_and_Apply
                                 steps:
-                                    - parallel:
-                                          - step:
-                                                type: TerraformPlan
-                                                name: TF Plan AWS
-                                                identifier: TF_Plan_S3
-                                                spec:
-                                                    configuration:
-                                                        command: Apply
-                                                        configFiles:
-                                                            store:
-                                                                type: Github
-                                                                spec:
-                                                                    gitFetchType: Branch
-                                                                    connectorRef: danf_gh
-                                                                    repoName: terraform_scripts
-                                                                    branch: main
-                                                                    folderPath: aws
-                                                        secretManagerRef: harnessSecretManager
-                                                        varFiles:
-                                                            - varFile:
-                                                                  identifier: terraform.tfvars
-                                                                  spec:
-                                                                      content: |-
-                                                                          aws_region = "us-east-1"
-                                                                          access_key = "<+secrets.getValue("danfawsaccesskeyid")>"
-                                                                          secret_key = "<+secrets.getValue("danfawssecretaccesskey")>"
-                                                                  type: Inline
-                                                    provisionerIdentifier: tfawss31
-                                                    delegateSelectors:
-                                                        - danfterraform
-                                                timeout: 10m
-                                                failureStrategies: []
-                                          - step:
-                                                type: TerraformPlan
-                                                name: TF Plan Az
-                                                identifier: TF_Plan_Blob
-                                                spec:
-                                                    configuration:
-                                                        command: Apply
-                                                        configFiles:
-                                                            store:
-                                                                type: Github
-                                                                spec:
-                                                                    gitFetchType: Branch
-                                                                    connectorRef: danf_gh
-                                                                    repoName: terraform_scripts
-                                                                    branch: main
-                                                                    folderPath: azure
-                                                        secretManagerRef: harnessSecretManager
-                                                        varFiles:
-                                                            - varFile:
-                                                                  identifier: terraform.tfvars
-                                                                  spec:
-                                                                      content: |-
-                                                                          tenant_id = "<+secrets.getValue("danaztenantid")>"
-                                                                          subscription_id = "<+secrets.getValue("danazsubscriptionid")>"
-                                                                          client_id = "<+secrets.getValue("danazclientid")>"
-                                                                          client_secret = "<+secrets.getValue("danazclientsecret")>"
-                                                                  type: Inline
-                                                    provisionerIdentifier: tfazblob1
-                                                    delegateSelectors:
-                                                        - danfterraform
-                                                timeout: 10m
-                                                failureStrategies: []
-                                    - parallel:
-                                          - step:
-                                                type: TerraformApply
-                                                name: TF Apply AWS
-                                                identifier: TF_Apply_S3
-                                                spec:
-                                                    provisionerIdentifier: tfawss31
-                                                    configuration:
-                                                        type: InheritFromPlan
-                                                timeout: 10m
-                                                when:
-                                                    stageStatus: Success
-                                                failureStrategies: []
-                                          - step:
-                                                type: TerraformApply
-                                                name: TF Apply Az
-                                                identifier: TF_Apply_AzBlob
-                                                spec:
-                                                    provisionerIdentifier: tfazblob1
-                                                    configuration:
-                                                        type: InheritFromPlan
-                                                timeout: 10m
+                                    - step:
+                                          type: TerraformPlan
+                                          name: TF Plan AWS
+                                          identifier: TF_Plan_S3
+                                          spec:
+                                              configuration:
+                                                  command: Apply
+                                                  configFiles:
+                                                      store:
+                                                          type: Github
+                                                          spec:
+                                                              gitFetchType: Branch
+                                                              connectorRef: danf_gh
+                                                              repoName: terraform_scripts
+                                                              branch: main
+                                                              folderPath: aws
+                                                  secretManagerRef: harnessSecretManager
+                                                  varFiles:
+                                                      - varFile:
+                                                            identifier: terraform.tfvars
+                                                            spec:
+                                                                content: |-
+                                                                    aws_region = "us-east-1"
+                                                                    access_key = "<+secrets.getValue("danfawsaccesskeyid")>"
+                                                                    secret_key = "<+secrets.getValue("danfawssecretaccesskey")>"
+                                                            type: Inline
+                                              provisionerIdentifier: <+input>
+                                              delegateSelectors:
+                                                  - danfterraform
+                                          timeout: 10m
+                                          failureStrategies: []
+                                    - step:
+                                          type: TerraformApply
+                                          name: TF Apply AWS
+                                          identifier: TF_Apply_S3
+                                          spec:
+                                              provisionerIdentifier: <+input>
+                                              configuration:
+                                                  type: InheritFromPlan
+                                          timeout: 10m
+                                          when:
+                                              stageStatus: Success
+                                          failureStrategies: []
                                 failureStrategies:
                                     - onFailure:
                                           errors:
@@ -521,30 +156,11 @@ pipeline:
                                 name: Open Jira Ticket
                                 identifier: Open_Jira_Ticket
                                 spec:
-                                    connectorRef: account.Harness_JIRA
-                                    projectKey: HD
-                                    issueType: Story
-                                    fields:
-                                        - name: Summary
-                                          value: Ticket to Track deployment
-                                        - name: Description
-                                          value: " Pipeline Name: <+pipeline.name> \\\\ Service Name: <+pipeline.variables.serviceName> \\\\ Deployment URL: https://app.harness.io/ng/#/account/6_vVHzo9Qeu9fXvj-AcbCQ/cd/orgs/default/projects/CD_Demo/pipelines/CD_Pipeline/executions/<+pipeline.executionId>/pipeline \\\\ Harness executionId: <+pipeline.executionId> \\\\ Harness sequenceId: <+pipeline.sequenceId> \\\\  PR requested by GH_User: <+pipeline.variables.ghusername>"
+                                    connectorRef: <+input>
+                                    projectKey: <+input>
+                                    issueType: <+input>
+                                    fields: []
                                 timeout: 1d
-                          - step:
-                                type: ShellScript
-                                name: Check Provenance
-                                identifier: checkProvenance
-                                spec:
-                                    shell: Bash
-                                    onDelegate: true
-                                    source:
-                                        type: Inline
-                                        spec:
-                                            script: echo "checking shas...."
-                                    environmentVariables: []
-                                    outputVariables: []
-                                    executionTarget: {}
-                                timeout: 10m
                           - step:
                                 name: Rollout Deployment
                                 identifier: rolloutDeployment
@@ -556,60 +172,19 @@ pipeline:
                                     stageStatus: Success
                                 failureStrategies: []
                           - step:
-                                type: ShellScript
-                                name: DAST Scan
-                                identifier: DAST_Scan
-                                spec:
-                                    shell: Bash
-                                    onDelegate: true
-                                    source:
-                                        type: Inline
-                                        spec:
-                                            script: |-
-                                                export LC_ALL=C.UTF-8
-                                                export LANG=C.UTF-8
-                                                rm zn_cli_ubuntu1804_20210409
-                                                curl -uchris.lucca@gmail.com:APAbZApbEn2oNhToGc9fEEUHys3 -O "https://clucca.jfrog.io/artifactory/zn/zn_cli_ubuntu1804_20210409"
-                                                chmod 777 zn_cli_ubuntu1804_20210409
-                                                mkdir -p ./results
-                                                ./zn_cli_ubuntu1804_20210409 --api_key <+secrets.getValue("zntoken")> --code_path . --results_path ./results --policy_id eTbXKi_eR_G7reguT-sDvA
-                                    environmentVariables: []
-                                    outputVariables: []
-                                    executionTarget: {}
-                                timeout: 10m
-                                when:
-                                    stageStatus: Success
-                                failureStrategies:
-                                    - onFailure:
-                                          errors:
-                                              - AllErrors
-                                          action:
-                                              type: MarkAsSuccess
-                          - step:
                                 type: JiraUpdate
                                 name: Update Jira
                                 identifier: Update_JIRA
                                 spec:
-                                    connectorRef: account.Harness_JIRA
-                                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                                    connectorRef: <+input>
+                                    issueKey: <+input>
+                                    transitionTo:
+                                        transitionName: ""
+                                        status: <+input>
                                     fields:
                                         - name: Comment
-                                          value: Succesfully Passed "CheckProvenance"
+                                          value: Successfully Passed "Deployment to Dev"
                                 timeout: 1d
-                          - step:
-                                type: K8sApply
-                                name: CCM AutoStopping Rule
-                                identifier: CCM_AutoStopping_Rule
-                                spec:
-                                    filePaths:
-                                        - k8s_manifest/autostoppingrule.yaml
-                                    skipDryRun: false
-                                    skipSteadyStateCheck: false
-                                    overrides: []
-                                timeout: 10m
-                                when:
-                                    stageStatus: Failure
-                                failureStrategies: []
                       rollbackSteps:
                           - step:
                                 name: Rollback Rollout Deployment
@@ -619,7 +194,7 @@ pipeline:
                                 spec: {}
                   serviceDependencies: []
                   serviceConfig:
-                      serviceRef: jhttp
+                      serviceRef: <+input>
                       serviceDefinition:
                           type: Kubernetes
                           spec:
@@ -627,9 +202,9 @@ pipeline:
                               artifacts:
                                   primary:
                                       spec:
-                                          connectorRef: docker_danf425
-                                          imagePath: dmontanez/jhttpz_isolated
-                                          tag: "1.219"
+                                          connectorRef: <+input>
+                                          imagePath: <+input>
+                                          tag: <+input>
                                       type: DockerRegistry
                               manifests:
                                   - manifest:
@@ -639,11 +214,11 @@ pipeline:
                                             store:
                                                 type: Github
                                                 spec:
-                                                    connectorRef: danf_jhttp2
+                                                    connectorRef: <+input>
                                                     gitFetchType: Branch
-                                                    paths:
-                                                        - k8s_manifest/jhttp_deployment.yaml
-                                                    branch: main
+                                                    paths: <+input>
+                                                    repoName: <+input>
+                                                    branch: <+input>
                                             skipResourceVersioning: false
                                   - manifest:
                                         identifier: values
@@ -652,11 +227,11 @@ pipeline:
                                             store:
                                                 type: Github
                                                 spec:
-                                                    connectorRef: danf_jhttp2
+                                                    connectorRef: <+input>
                                                     gitFetchType: Branch
-                                                    paths:
-                                                        - k8s_manifest/values.yaml
-                                                    branch: main
+                                                    paths: <+input>
+                                                    repoName: <+input>
+                                                    branch: <+input>
               tags: {}
               failureStrategies:
                   - onFailure:
@@ -680,8 +255,11 @@ pipeline:
                                 name: Update Jira
                                 identifier: Update_JIRA
                                 spec:
-                                    connectorRef: account.Harness_JIRA
-                                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                                    connectorRef: <+input>
+                                    issueKey: <+input>
+                                    transitionTo:
+                                        transitionName: ""
+                                        status: <+input>
                                     fields:
                                         - name: Comment
                                           value: '"Deploy to QA" started'
@@ -696,81 +274,20 @@ pipeline:
                                 when:
                                     stageStatus: Success
                                 failureStrategies: []
-                          - stepGroup:
-                                name: Tests
-                                identifier: Tests
-                                steps:
-                                    - parallel:
-                                          - step:
-                                                type: ShellScript
-                                                name: Regression Tests
-                                                identifier: Regression_Tests
-                                                spec:
-                                                    shell: Bash
-                                                    onDelegate: true
-                                                    source:
-                                                        type: Inline
-                                                        spec:
-                                                            script: echo "Regression Tests"
-                                                    environmentVariables: []
-                                                    outputVariables: []
-                                                    executionTarget: {}
-                                                timeout: 10m
-                                          - step:
-                                                type: ShellScript
-                                                name: Selenium
-                                                identifier: Selenium
-                                                spec:
-                                                    shell: Bash
-                                                    onDelegate: true
-                                                    source:
-                                                        type: Inline
-                                                        spec:
-                                                            script: echo "Selenium"
-                                                    environmentVariables: []
-                                                    outputVariables: []
-                                                    executionTarget: {}
-                                                timeout: 10m
-                                          - step:
-                                                type: ShellScript
-                                                name: JMeter
-                                                identifier: JMeter
-                                                spec:
-                                                    shell: Bash
-                                                    onDelegate: true
-                                                    source:
-                                                        type: Inline
-                                                        spec:
-                                                            script: echo "JMeter"
-                                                    environmentVariables: []
-                                                    outputVariables: []
-                                                    executionTarget: {}
-                                                timeout: 10m
                           - step:
                                 type: JiraUpdate
                                 name: Update Jira
                                 identifier: Update_Jira
                                 spec:
-                                    connectorRef: account.Harness_JIRA
-                                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                                    connectorRef: <+input>
+                                    issueKey: <+input>
+                                    transitionTo:
+                                        transitionName: ""
+                                        status: <+input>
                                     fields:
                                         - name: Comment
                                           value: QA Tests Successfully Passed
                                 timeout: 1d
-                          - step:
-                                type: K8sApply
-                                name: CCM AutoStopping Rule
-                                identifier: CCM_AutoStopping_Rule
-                                spec:
-                                    filePaths:
-                                        - k8s_manifest/autostoppingrule.yaml
-                                    skipDryRun: false
-                                    skipSteadyStateCheck: false
-                                    overrides: []
-                                timeout: 10m
-                                when:
-                                    stageStatus: Failure
-                                failureStrategies: []
                       rollbackSteps:
                           - step:
                                 name: Rollback Rollout Deployment
@@ -787,7 +304,7 @@ pipeline:
                       infrastructureDefinition:
                           type: KubernetesDirect
                           spec:
-                              connectorRef: ciDemo
+                              connectorRef: <+input>
                               namespace: e2e-qa
                               releaseName: release-<+INFRA_KEY>
                       allowSimultaneousDeployments: false
@@ -828,10 +345,8 @@ pipeline:
                                         spec:
                                             matchAnyCondition: true
                                             conditions: []
-                                    connectorRef: account.Harness_JIRA
-                                    projectKey: HD
-                                    issueType: Story
-                                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                                    connectorRef: <+input>
+                                    issueKey: <+input>
                                 failureStrategies:
                                     - onFailure:
                                           errors:
@@ -840,150 +355,6 @@ pipeline:
                                               type: Ignore
                   serviceDependencies: []
               tags: {}
-        - stage:
-              name: PreDeployment Security Checks
-              identifier: PreProd_Security
-              type: SecurityTests
-              spec:
-                  cloneCodebase: true
-                  infrastructure:
-                      type: KubernetesDirect
-                      spec:
-                          connectorRef: ciDemo
-                          namespace: build
-                          automountServiceAccountToken: true
-                          nodeSelector: {}
-                          os: Linux
-                  execution:
-                      steps:
-                          - parallel:
-                                - step:
-                                      type: Security
-                                      name: OWASP
-                                      identifier: OWASP
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              policy_type: orchestratedScan
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: <+codebase.branch>
-                                              product_name: owasp
-                                              product_config_name: default
-                                              fail_on_severity: HIGH
-                                          imagePullPolicy: Always
-                                          resources:
-                                              limits:
-                                                  memory: 2048Mi
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Fortify
-                                      identifier: fortify
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: fortify
-                                              product_config_name: fortify-default
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: main
-                                              customer_artifacts_path: sto_tests/scan_tools/fortify/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Checkmarx
-                                      identifier: checkmarx
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              product_name: checkmarx
-                                              product_config_name: checkmarx
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_project: jhttp_isolated
-                                              repository_branch: dev
-                                              customer_artifacts_path: sto_tests/scan_tools/checkmarx/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                                      when:
-                                          stageStatus: Success
-                                - step:
-                                      type: Security
-                                      name: Sonar_STO
-                                      identifier: Sonar_Scan_Vulnerabilities
-                                      spec:
-                                          connectorRef: account.Harness_Docker_Connector
-                                          privileged: true
-                                          settings:
-                                              policy_type: manualUpload
-                                              scan_type: repository
-                                              repository_branch: main
-                                              product_name: sonarqube
-                                              product_access_token: 9be106a1849c3b98f5beb1cc4b916674432944e0
-                                              product_project_name: jhttp_isolated
-                                              product_project_key: jhttp_isolated
-                                              product_domain: http://sonar.harness-demo.site
-                                              product_config_name: sonarqube-agent
-                                              product_lookup_type: byKey
-                                              repository_project: jhttp_isolated
-                                              customer_artifacts_path: sto_tests/scan_tools/sonarqube/test_data
-                                              manual_upload_filename: "001"
-                                          imagePullPolicy: Always
-                                      when:
-                                          stageStatus: Success
-                                      failureStrategies:
-                                          - onFailure:
-                                                errors:
-                                                    - AllErrors
-                                                action:
-                                                    type: Ignore
-                  serviceDependencies:
-                      - identifier: dind
-                        name: dind
-                        type: Service
-                        spec:
-                            connectorRef: account.Harness_Docker_Connector
-                            image: docker:dind
-                            privileged: true
-                            resources:
-                                limits:
-                                    memory: 2048Mi
-                                    cpu: 1000m
-                  sharedPaths:
-                      - /var/run
-              when:
-                  pipelineStatus: Success
-              variables:
-                  - name: sto_dump_runner_logs
-                    type: String
-                    value: "true"
         - stage:
               name: "Deploy to Prod "
               identifier: Deploy_to_Prod
@@ -997,8 +368,11 @@ pipeline:
                                 name: Update Jira
                                 identifier: Update_JIRA
                                 spec:
-                                    connectorRef: account.Harness_JIRA
-                                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                                    connectorRef: <+input>
+                                    issueKey: <+input>
+                                    transitionTo:
+                                        transitionName: ""
+                                        status: <+input>
                                     fields:
                                         - name: Comment
                                           value: '"Deploy to Prod" started'
@@ -1015,19 +389,55 @@ pipeline:
                                           spec:
                                               instanceSelection:
                                                   spec:
-                                                      percentage: 5
+                                                      percentage: 100
                                                   type: Percentage
                                               skipDryRun: false
-                                    - step:
-                                          type: Http
-                                          name: Postman HTTP Check
-                                          identifier: Postman_HTTP_Check
-                                          spec:
-                                              url: https://harness.io
-                                              method: GET
-                                              headers: []
-                                              outputVariables: []
-                                          timeout: 10s
+                                    - parallel:
+                                          - step:
+                                                type: Http
+                                                name: Postman HTTP Check
+                                                identifier: Postman_HTTP_Check
+                                                spec:
+                                                    url: <+input>
+                                                    method: GET
+                                                    headers: []
+                                                    outputVariables: []
+                                                timeout: 10s
+                                          - step:
+                                                type: Verify
+                                                name: Continuous Verification
+                                                identifier: Continuous_Verification
+                                                spec:
+                                                    type: Rolling
+                                                    monitoredService:
+                                                        type: Default
+                                                        spec: {}
+                                                    spec:
+                                                        sensitivity: MEDIUM
+                                                        duration: 5m
+                                                        deploymentTag: <+serviceConfig.artifacts.primary.tag>
+                                                timeout: 3h
+                                                failureStrategies:
+                                                    - onFailure:
+                                                          errors:
+                                                              - Verification
+                                                          action:
+                                                              type: ManualIntervention
+                                                              spec:
+                                                                  timeout: 2h
+                                                                  onTimeout:
+                                                                      action:
+                                                                          type: StageRollback
+                                                    - onFailure:
+                                                          errors:
+                                                              - Unknown
+                                                          action:
+                                                              type: ManualIntervention
+                                                              spec:
+                                                                  timeout: 2h
+                                                                  onTimeout:
+                                                                      action:
+                                                                          type: Ignore
                                     - step:
                                           name: Canary Delete
                                           identifier: canaryDelete
@@ -1079,7 +489,7 @@ pipeline:
                                                 name: TF Destroy AWS
                                                 identifier: Tf_Destroy_S3
                                                 spec:
-                                                    provisionerIdentifier: tfawss31
+                                                    provisionerIdentifier: <+input>
                                                     configuration:
                                                         type: InheritFromApply
                                                 timeout: 10m
@@ -1088,7 +498,7 @@ pipeline:
                                                 name: TF Destroy Az
                                                 identifier: TF_Destroy_AzBlob
                                                 spec:
-                                                    provisionerIdentifier: tfazblob1
+                                                    provisionerIdentifier: <+input>
                                                     configuration:
                                                         type: InheritFromApply
                                                 timeout: 10m
@@ -1118,7 +528,7 @@ pipeline:
                       infrastructureDefinition:
                           type: KubernetesDirect
                           spec:
-                              connectorRef: ciDemo
+                              connectorRef: <+input>
                               namespace: e2e-prod
                               releaseName: release-<+INFRA_KEY>
                       allowSimultaneousDeployments: false
