@@ -5,7 +5,8 @@ pipeline:
     properties:
         ci:
             codebase:
-                connectorRef: StateS_GH
+                connectorRef: <+input>
+                repoName: <+input>
                 build: <+input>
     stages:
         - stage:
@@ -541,14 +542,7 @@ pipeline:
                             type: StageRollback
               when:
                   pipelineStatus: Success
-    variables:
-        - name: pipelineVar
-          type: String
-          value: pipelineVarValue
-        - name: ghusername
-          type: String
-          default: manually-triggered
-          value: <+input>
+    variables: []
     projectIdentifier: GitX
     orgIdentifier: default
     tags: {}
