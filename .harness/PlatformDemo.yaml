@@ -209,30 +209,20 @@ pipeline:
                                       type: DockerRegistry
                               manifests:
                                   - manifest:
-                                        identifier: manifests
-                                        type: K8sManifest
+                                        identifier: demo-chart
+                                        type: HelmChart
                                         spec:
                                             store:
                                                 type: Github
                                                 spec:
                                                     connectorRef: <+input>
                                                     gitFetchType: Branch
-                                                    paths: <+input>
+                                                    folderPath: <+input>
                                                     repoName: <+input>
                                                     branch: <+input>
+                                            valuesPaths: <+input>
                                             skipResourceVersioning: false
-                                  - manifest:
-                                        identifier: values
-                                        type: Values
-                                        spec:
-                                            store:
-                                                type: Github
-                                                spec:
-                                                    connectorRef: <+input>
-                                                    gitFetchType: Branch
-                                                    paths: <+input>
-                                                    repoName: <+input>
-                                                    branch: <+input>
+                                            helmVersion: V3
               tags: {}
               failureStrategies:
                   - onFailure:
