@@ -50,6 +50,20 @@ pipeline:
                                     image: <+input>
                                     shell: Sh
                                     command: <+input>
+                                failureStrategies: []
+                                strategy:
+                                    matrix:
+                                        service:
+                                            - nginx
+                                            - nginx1
+                                        env:
+                                            - dev
+                                            - prod
+                                        exclude:
+                                            - service: nginx1
+                                              env: prod
+                                            - service: nginx
+                                              env: dev
                           - step:
                                 type: BuildAndPushECR
                                 name: Build and Push to ECR
