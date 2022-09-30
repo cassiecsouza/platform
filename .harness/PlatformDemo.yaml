@@ -48,7 +48,7 @@ pipeline:
                     connectorRef: account.harnessImage
                     repo: cassiesouza/sandbox
                     tags:
-                      - 1.<+pipeline.sequenceId>
+                      - <+pipeline.stages.Test_Build_and_Push.variables.tag>
           infrastructure:
             type: KubernetesDirect
             spec:
@@ -65,6 +65,11 @@ pipeline:
                 - AllErrors
               action:
                 type: Ignore
+        variables:
+          - name: tag
+            type: String
+            description: ""
+            value: 1.<+pipeline.sequenceId>
     - stage:
         name: Deploy to Dev
         identifier: Deploy
@@ -136,8 +141,8 @@ pipeline:
                   primary:
                     spec:
                       connectorRef: account.harnessImage
-                      imagePath: cassiesouza/sandbox/test
-                      tag: <+test>
+                      imagePath: cassiesouza/sandbox
+                      tag: <+pipeline.stages.Test_Build_and_Push.variables.tag>
                     type: DockerRegistry
                 manifests:
                   - manifest:
