@@ -1,560 +1,361 @@
 pipeline:
-    name: Platform Demo
-    identifier: Platform_Demo
-    allowStageExecutions: false
-    properties:
-        ci:
-            codebase:
+  name: Platform Demo
+  identifier: Platform_Demo
+  allowStageExecutions: false
+  properties:
+    ci:
+      codebase:
+        connectorRef: <+input>
+        repoName: <+input>
+        build: <+input>
+  stages:
+    - stage:
+        name: Build Test and Push
+        identifier: Test_Build_and_Push
+        type: CI
+        spec:
+          cloneCodebase: true
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Build Java App
+                  identifier: Build_Java_App
+                  spec:
+                    connectorRef: <+input>
+                    image: <+input>
+                    shell: Sh
+                    command: <+input>
+                  failureStrategies: []
+                  strategy:
+                    matrix:
+                      service:
+                        - nginx
+                        - nginx1
+                      env:
+                        - dev
+                        - prod
+                      exclude:
+                        - service: nginx1
+                          env: prod
+                        - service: nginx
+                          env: dev
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push to Dockerhub
+                  identifier: Build_and_Push_to_Dockerhub
+                  spec:
+                    connectorRef: account.harnessImage
+                    repo: cassiesouza/sandbox
+                    tags:
+                      - 1.<+pipeline.sequenceId>
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: gcpkube
+              namespace: build
+              automountServiceAccountToken: true
+              nodeSelector: {}
+              os: Linux
+          sharedPaths:
+            - /var/run
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: Ignore
+    - stage:
+        name: Deploy to Dev
+        identifier: Deploy
+        description: ""
+        type: Deployment
+        spec:
+          infrastructure:
+            environmentRef: dev
+            infrastructureDefinition:
+              type: KubernetesDirect
+              spec:
                 connectorRef: <+input>
-                repoName: <+input>
-                build: <+input>
-    stages:
-        - stage:
-              name: Build Test and Push
-              identifier: Test_Build_and_Push
-              type: CI
+                namespace: e2e-dev
+                releaseName: release-<+INFRA_KEY>
+            allowSimultaneousDeployments: true
+          execution:
+            steps:
+              - step:
+                  type: JiraCreate
+                  name: Open Jira Ticket
+                  identifier: Open_Jira_Ticket
+                  spec:
+                    connectorRef: <+input>
+                    projectKey: <+input>
+                    issueType: <+input>
+                    fields:
+                      - name: Summary
+                        value: Ticket to Track Deployment
+                  timeout: 1d
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                  when:
+                    stageStatus: Success
+                  failureStrategies: []
+              - step:
+                  type: JiraUpdate
+                  name: Update Jira
+                  identifier: Update_JIRA
+                  spec:
+                    connectorRef: <+input>
+                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                    transitionTo:
+                      transitionName: ""
+                      status: <+input>
+                    fields:
+                      - name: Comment
+                        value: Successfully Passed "Deployment to Dev"
+                  timeout: 1d
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec: {}
+          serviceDependencies: []
+          serviceConfig:
+            serviceRef: jhttp
+            serviceDefinition:
+              type: Kubernetes
               spec:
-                  cloneCodebase: true
-                  execution:
-                      steps:
-                          - step:
-                                type: RunTests
-                                name: Run Tests with Intelligence
-                                identifier: runTestsWithIntelligence
-                                spec:
-                                    connectorRef: <+input>
-                                    image: maven:3.5.2-jdk-8-alpine
-                                    language: Java
-                                    buildTool: Maven
-                                    args: test
-                                    packages: io.harness.
-                                    runOnlySelectedTests: true
-                                    reports:
-                                        type: JUnit
-                                        spec:
-                                            paths:
-                                                - "**/*.xml"
-                                    resources:
-                                        limits:
-                                            memory: 1000Mi
-                                            cpu: "1"
-                                when:
-                                    stageStatus: Success
-                                failureStrategies: []
-                          - step:
-                                type: Run
-                                name: Build Java App
-                                identifier: Build_Java_App
-                                spec:
-                                    connectorRef: <+input>
-                                    image: <+input>
-                                    shell: Sh
-                                    command: <+input>
-                                failureStrategies: []
-                                strategy:
-                                    matrix:
-                                        service:
-                                            - nginx
-                                            - nginx1
-                                        env:
-                                            - dev
-                                            - prod
-                                        exclude:
-                                            - service: nginx1
-                                              env: prod
-                                            - service: nginx
-                                              env: dev
-                          - step:
-                                type: BuildAndPushECR
-                                name: Build and Push to ECR
-                                identifier: Build_and_Push_to_ECR
-                                spec:
-                                    connectorRef: <+input>
-                                    region: <+input>
-                                    account: <+input>
-                                    imageName: <+input>
-                                    tags: <+input>
-                  infrastructure:
-                      type: KubernetesDirect
+                variables: []
+                artifacts:
+                  primary:
+                    spec:
+                      connectorRef: account.harnessImage
+                      imagePath: cassiesouza/sandbox/test
+                      tag: <+test>
+                    type: DockerRegistry
+                manifests:
+                  - manifest:
+                      identifier: demo-chart
+                      type: HelmChart
                       spec:
-                          connectorRef: <+input>
-                          namespace: <+input>
-                          automountServiceAccountToken: true
-                          nodeSelector: {}
-                          os: Linux
-                  sharedPaths:
-                      - /var/run
-              failureStrategies:
-                  - onFailure:
-                        errors:
-                            - AllErrors
-                        action:
-                            type: Ignore
-        - stage:
-              name: Deploy to Dev
-              identifier: Deploy
-              description: ""
-              type: Deployment
-              spec:
-                  infrastructure:
-                      environmentRef: dev
-                      infrastructureDefinition:
-                          type: KubernetesDirect
+                        store:
+                          type: Github
                           spec:
-                              connectorRef: <+input>
-                              namespace: e2e-dev
-                              releaseName: release-<+INFRA_KEY>
-                      allowSimultaneousDeployments: true
-                  execution:
-                      steps:
-                          - stepGroup:
-                                name: Terraform Plan and Apply
-                                identifier: Terraform_Plan_and_Apply
-                                steps:
-                                    - step:
-                                          type: TerraformPlan
-                                          name: TF Plan AWS
-                                          identifier: TF_Plan_S3
-                                          spec:
-                                              configuration:
-                                                  command: Apply
-                                                  configFiles:
-                                                      store:
-                                                          type: Github
-                                                          spec:
-                                                              gitFetchType: Branch
-                                                              connectorRef: danf_gh
-                                                              repoName: terraform_scripts
-                                                              branch: main
-                                                              folderPath: aws
-                                                  secretManagerRef: harnessSecretManager
-                                                  varFiles:
-                                                      - varFile:
-                                                            identifier: terraform.tfvars
-                                                            spec:
-                                                                content: |-
-                                                                    aws_region = "us-east-1"
-                                                                    access_key = "<+secrets.getValue("danfawsaccesskeyid")>"
-                                                                    secret_key = "<+secrets.getValue("danfawssecretaccesskey")>"
-                                                            type: Inline
-                                              provisionerIdentifier: <+input>
-                                              delegateSelectors:
-                                                  - danfterraform
-                                          timeout: 10m
-                                          failureStrategies: []
-                                    - step:
-                                          type: TerraformApply
-                                          name: TF Apply AWS
-                                          identifier: TF_Apply_S3
-                                          spec:
-                                              provisionerIdentifier: <+input>
-                                              configuration:
-                                                  type: InheritFromPlan
-                                          timeout: 10m
-                                          when:
-                                              stageStatus: Success
-                                          failureStrategies: []
-                                failureStrategies:
-                                    - onFailure:
-                                          errors:
-                                              - AllErrors
-                                          action:
-                                              type: MarkAsSuccess
-                                spec: {}
-                          - step:
-                                type: JiraCreate
-                                name: Open Jira Ticket
-                                identifier: Open_Jira_Ticket
-                                spec:
-                                    connectorRef: <+input>
-                                    projectKey: <+input>
-                                    issueType: <+input>
-                                    fields: []
-                                timeout: 1d
-                          - step:
-                                name: Rollout Deployment
-                                identifier: rolloutDeployment
-                                type: K8sRollingDeploy
-                                timeout: 10m
-                                spec:
-                                    skipDryRun: false
-                                when:
-                                    stageStatus: Success
-                                failureStrategies: []
-                          - step:
-                                type: JiraUpdate
-                                name: Update Jira
-                                identifier: Update_JIRA
-                                spec:
-                                    connectorRef: <+input>
-                                    issueKey: <+input>
-                                    transitionTo:
-                                        transitionName: ""
-                                        status: <+input>
-                                    fields:
-                                        - name: Comment
-                                          value: Successfully Passed "Deployment to Dev"
-                                timeout: 1d
-                      rollbackSteps:
-                          - step:
-                                name: Rollback Rollout Deployment
-                                identifier: rollbackRolloutDeployment
-                                type: K8sRollingRollback
-                                timeout: 10m
-                                spec: {}
-                  serviceDependencies: []
-                  serviceConfig:
-                      serviceRef: <+input>
-                      serviceDefinition:
-                          type: Kubernetes
-                          spec:
-                              variables: []
-                              artifacts:
-                                  primary:
-                                      spec:
-                                          connectorRef: <+input>
-                                          imagePath: <+input>
-                                          tag: <+input>
-                                      type: DockerRegistry
-                              manifests:
-                                  - manifest:
-                                        identifier: demo-chart
-                                        type: HelmChart
-                                        spec:
-                                            store:
-                                                type: Github
-                                                spec:
-                                                    connectorRef: <+input>
-                                                    gitFetchType: Branch
-                                                    folderPath: <+input>
-                                                    repoName: <+input>
-                                                    branch: <+input>
-                                            valuesPaths: <+input>
-                                            skipResourceVersioning: false
-                                            helmVersion: V3
-              tags: {}
-              failureStrategies:
-                  - onFailure:
+                            connectorRef: account.github
+                            gitFetchType: Branch
+                            folderPath: test
+                            repoName: platform
+                            branch: main
+                        valuesPaths: []
+                        skipResourceVersioning: false
+                        helmVersion: V3
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        variables: []
+        when:
+          pipelineStatus: Success
+    - stage:
+        name: Deploy to QA
+        identifier: Deploy_to_QA
+        description: ""
+        type: Deployment
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: JiraUpdate
+                  name: Update Jira
+                  identifier: Update_JIRA
+                  spec:
+                    connectorRef: <+input>
+                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                    transitionTo:
+                      transitionName: ""
+                      status: <+input>
+                    fields:
+                      - name: Comment
+                        value: "\"Deploy to QA\" started"
+                  timeout: 1d
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                  when:
+                    stageStatus: Success
+                  failureStrategies: []
+              - step:
+                  type: JiraUpdate
+                  name: Update Jira
+                  identifier: Update_Jira
+                  spec:
+                    connectorRef: <+input>
+                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                    transitionTo:
+                      transitionName: ""
+                      status: <+input>
+                    fields:
+                      - name: Comment
+                        value: QA Tests Successfully Passed
+                  timeout: 1d
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec: {}
+          serviceDependencies: []
+          serviceConfig:
+            useFromStage:
+              stage: Deploy
+          infrastructure:
+            environmentRef: qa
+            infrastructureDefinition:
+              type: KubernetesDirect
+              spec:
+                connectorRef: <+input>
+                namespace: e2e-qa
+                releaseName: release-<+INFRA_KEY>
+            allowSimultaneousDeployments: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
+        variables: []
+    - stage:
+        name: Jira Approval
+        identifier: Approval
+        description: ""
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Jira Approval
+                  identifier: jiraApproval
+                  type: JiraApproval
+                  timeout: 4h
+                  spec:
+                    approvalCriteria:
+                      type: KeyValues
+                      spec:
+                        matchAnyCondition: true
+                        conditions:
+                          - key: Status
+                            operator: equals
+                            value: Approved
+                    rejectionCriteria:
+                      type: KeyValues
+                      spec:
+                        matchAnyCondition: true
+                        conditions: []
+                    connectorRef: <+input>
+                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                  failureStrategies:
+                    - onFailure:
                         errors:
-                            - AllErrors
+                          - Timeout
                         action:
-                            type: StageRollback
-              variables: []
-              when:
-                  pipelineStatus: Success
-        - stage:
-              name: Deploy to QA
-              identifier: Deploy_to_QA
-              description: ""
-              type: Deployment
+                          type: Ignore
+          serviceDependencies: []
+        tags: {}
+    - stage:
+        name: "Deploy to Prod "
+        identifier: Deploy_to_Prod
+        description: ""
+        type: Deployment
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: JiraUpdate
+                  name: Update Jira
+                  identifier: Update_JIRA
+                  spec:
+                    connectorRef: <+input>
+                    issueKey: <+pipeline.stages.Deploy.spec.execution.steps.Open_Jira_Ticket.issue.key>
+                    transitionTo:
+                      transitionName: ""
+                      status: <+input>
+                    fields:
+                      - name: Comment
+                        value: "\"Deploy to Prod\" started"
+                  timeout: 1d
+              - stepGroup:
+                  name: Primary Deployment
+                  identifier: primaryDepoyment
+                  steps:
+                    - step:
+                        name: Rolling Deployment
+                        identifier: rollingDeployment
+                        type: K8sRollingDeploy
+                        timeout: 10m
+                        spec:
+                          skipDryRun: false
+                        failureStrategies:
+                          - onFailure:
+                              errors:
+                                - AllErrors
+                              action:
+                                type: MarkAsSuccess
+                  rollbackSteps:
+                    - step:
+                        name: Rolling Rollback
+                        identifier: rollingRollback
+                        type: K8sRollingRollback
+                        timeout: 10m
+                        spec: {}
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rollback
+                  identifier: Rollback
+                  spec:
+                    skipDryRun: false
+                  timeout: 10m
+          serviceDependencies: []
+          serviceConfig:
+            useFromStage:
+              stage: Deploy
+          infrastructure:
+            environmentRef: prod
+            infrastructureDefinition:
+              type: KubernetesDirect
               spec:
-                  execution:
-                      steps:
-                          - step:
-                                type: JiraUpdate
-                                name: Update Jira
-                                identifier: Update_JIRA
-                                spec:
-                                    connectorRef: <+input>
-                                    issueKey: <+input>
-                                    transitionTo:
-                                        transitionName: ""
-                                        status: <+input>
-                                    fields:
-                                        - name: Comment
-                                          value: '"Deploy to QA" started'
-                                timeout: 1d
-                          - step:
-                                name: Rollout Deployment
-                                identifier: rolloutDeployment
-                                type: K8sRollingDeploy
-                                timeout: 10m
-                                spec:
-                                    skipDryRun: false
-                                when:
-                                    stageStatus: Success
-                                failureStrategies: []
-                          - step:
-                                type: JiraUpdate
-                                name: Update Jira
-                                identifier: Update_Jira
-                                spec:
-                                    connectorRef: <+input>
-                                    issueKey: <+input>
-                                    transitionTo:
-                                        transitionName: ""
-                                        status: <+input>
-                                    fields:
-                                        - name: Comment
-                                          value: QA Tests Successfully Passed
-                                timeout: 1d
-                      rollbackSteps:
-                          - step:
-                                name: Rollback Rollout Deployment
-                                identifier: rollbackRolloutDeployment
-                                type: K8sRollingRollback
-                                timeout: 10m
-                                spec: {}
-                  serviceDependencies: []
-                  serviceConfig:
-                      useFromStage:
-                          stage: Deploy
-                  infrastructure:
-                      environmentRef: qa
-                      infrastructureDefinition:
-                          type: KubernetesDirect
-                          spec:
-                              connectorRef: <+input>
-                              namespace: e2e-qa
-                              releaseName: release-<+INFRA_KEY>
-                      allowSimultaneousDeployments: false
-              tags: {}
-              failureStrategies:
-                  - onFailure:
-                        errors:
-                            - AllErrors
-                        action:
-                            type: StageRollback
-              when:
-                  pipelineStatus: Success
-              variables: []
-        - stage:
-              name: Jira Approval
-              identifier: Approval
-              description: ""
-              type: Approval
-              spec:
-                  execution:
-                      steps:
-                          - step:
-                                name: Jira Approval
-                                identifier: jiraApproval
-                                type: JiraApproval
-                                timeout: 4h
-                                spec:
-                                    approvalCriteria:
-                                        type: KeyValues
-                                        spec:
-                                            matchAnyCondition: true
-                                            conditions:
-                                                - key: Status
-                                                  operator: equals
-                                                  value: Approved
-                                    rejectionCriteria:
-                                        type: KeyValues
-                                        spec:
-                                            matchAnyCondition: true
-                                            conditions: []
-                                    connectorRef: <+input>
-                                    issueKey: <+input>
-                                failureStrategies:
-                                    - onFailure:
-                                          errors:
-                                              - Timeout
-                                          action:
-                                              type: Ignore
-                  serviceDependencies: []
-              tags: {}
-        - stage:
-              name: "Deploy to Prod "
-              identifier: Deploy_to_Prod
-              description: ""
-              type: Deployment
-              spec:
-                  execution:
-                      steps:
-                          - step:
-                                type: JiraUpdate
-                                name: Update Jira
-                                identifier: Update_JIRA
-                                spec:
-                                    connectorRef: <+input>
-                                    issueKey: <+input>
-                                    transitionTo:
-                                        transitionName: ""
-                                        status: <+input>
-                                    fields:
-                                        - name: Comment
-                                          value: '"Deploy to Prod" started'
-                                timeout: 1d
-                          - stepGroup:
-                                name: Canary Deployment
-                                identifier: canaryDepoyment
-                                steps:
-                                    - step:
-                                          name: Canary Deployment
-                                          identifier: canaryDeployment
-                                          type: K8sCanaryDeploy
-                                          timeout: 10m
-                                          spec:
-                                              instanceSelection:
-                                                  spec:
-                                                      percentage: 100
-                                                  type: Percentage
-                                              skipDryRun: false
-                                    - parallel:
-                                          - step:
-                                                type: Http
-                                                name: Postman HTTP Check
-                                                identifier: Postman_HTTP_Check
-                                                spec:
-                                                    url: <+input>
-                                                    method: GET
-                                                    headers: []
-                                                    outputVariables: []
-                                                timeout: 10s
-                                          - step:
-                                                type: Verify
-                                                name: Continuous Verification
-                                                identifier: Continuous_Verification
-                                                spec:
-                                                    type: Rolling
-                                                    monitoredService:
-                                                        type: Default
-                                                        spec: {}
-                                                    spec:
-                                                        sensitivity: MEDIUM
-                                                        duration: 5m
-                                                        deploymentTag: <+serviceConfig.artifacts.primary.tag>
-                                                timeout: 3h
-                                                failureStrategies:
-                                                    - onFailure:
-                                                          errors:
-                                                              - Verification
-                                                          action:
-                                                              type: ManualIntervention
-                                                              spec:
-                                                                  timeout: 2h
-                                                                  onTimeout:
-                                                                      action:
-                                                                          type: StageRollback
-                                                    - onFailure:
-                                                          errors:
-                                                              - Unknown
-                                                          action:
-                                                              type: ManualIntervention
-                                                              spec:
-                                                                  timeout: 2h
-                                                                  onTimeout:
-                                                                      action:
-                                                                          type: Ignore
-                                    - step:
-                                          name: Canary Delete
-                                          identifier: canaryDelete
-                                          type: K8sCanaryDelete
-                                          timeout: 10m
-                                          spec:
-                                              skipDryRun: false
-                                          when:
-                                              stageStatus: All
-                                          failureStrategies: []
-                                rollbackSteps:
-                                    - step:
-                                          name: Canary Delete
-                                          identifier: rollbackCanaryDelete
-                                          type: K8sCanaryDelete
-                                          timeout: 10m
-                                          spec: {}
-                          - stepGroup:
-                                name: Primary Deployment
-                                identifier: primaryDepoyment
-                                steps:
-                                    - step:
-                                          name: Rolling Deployment
-                                          identifier: rollingDeployment
-                                          type: K8sRollingDeploy
-                                          timeout: 10m
-                                          spec:
-                                              skipDryRun: false
-                                          failureStrategies:
-                                              - onFailure:
-                                                    errors:
-                                                        - AllErrors
-                                                    action:
-                                                        type: MarkAsSuccess
-                                rollbackSteps:
-                                    - step:
-                                          name: Rolling Rollback
-                                          identifier: rollingRollback
-                                          type: K8sRollingRollback
-                                          timeout: 10m
-                                          spec: {}
-                          - stepGroup:
-                                name: Terraform CleanUp
-                                identifier: TF_CleanUp
-                                steps:
-                                    - parallel:
-                                          - step:
-                                                type: TerraformDestroy
-                                                name: TF Destroy AWS
-                                                identifier: Tf_Destroy_S3
-                                                spec:
-                                                    provisionerIdentifier: <+input>
-                                                    configuration:
-                                                        type: InheritFromApply
-                                                timeout: 10m
-                                          - step:
-                                                type: TerraformDestroy
-                                                name: TF Destroy Az
-                                                identifier: TF_Destroy_AzBlob
-                                                spec:
-                                                    provisionerIdentifier: <+input>
-                                                    configuration:
-                                                        type: InheritFromApply
-                                                timeout: 10m
-                                when:
-                                    stageStatus: All
-                                failureStrategies:
-                                    - onFailure:
-                                          errors:
-                                              - AllErrors
-                                          action:
-                                              type: MarkAsSuccess
-                                spec: {}
-                      rollbackSteps:
-                          - step:
-                                type: K8sRollingRollback
-                                name: Rollback
-                                identifier: Rollback
-                                spec:
-                                    skipDryRun: false
-                                timeout: 10m
-                  serviceDependencies: []
-                  serviceConfig:
-                      useFromStage:
-                          stage: Deploy
-                  infrastructure:
-                      environmentRef: prod
-                      infrastructureDefinition:
-                          type: KubernetesDirect
-                          spec:
-                              connectorRef: <+input>
-                              namespace: e2e-prod
-                              releaseName: release-<+INFRA_KEY>
-                      allowSimultaneousDeployments: false
-              tags: {}
-              failureStrategies:
-                  - onFailure:
-                        errors:
-                            - AllErrors
-                        action:
-                            type: StageRollback
-              when:
-                  pipelineStatus: Success
-    variables: []
-    projectIdentifier: GitX
-    orgIdentifier: default
-    tags: {}
-    description: test change
-    notificationRules:
-        - name: Slack - demo-support channel
-          identifier: Slack_demosupport_channel
-          pipelineEvents:
-              - type: PipelineFailed
-              - type: PipelineSuccess
-          notificationMethod:
-              type: Slack
-              spec:
-                  userGroups: []
-                  webhookUrl: https://hooks.slack.com/services/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
-          enabled: true
+                connectorRef: <+input>
+                namespace: e2e-prod
+                releaseName: release-<+INFRA_KEY>
+            allowSimultaneousDeployments: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        when:
+          pipelineStatus: Success
+        variables: []
+  variables: []
+  projectIdentifier: GitX
+  orgIdentifier: default
+  tags: {}
