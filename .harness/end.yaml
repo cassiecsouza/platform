@@ -1,0 +1,25 @@
+pipeline:
+  name: end
+  identifier: end
+  template:
+    templateRef: testtemplate
+    versionLabel: "1.0"
+    templateInputs:
+      stages:
+        - stage:
+            identifier: Test
+            type: Deployment
+            spec:
+              service:
+                serviceInputs:
+                  serviceDefinition:
+                    type: Kubernetes
+                    spec:
+                      artifacts:
+                        primary:
+                          primaryArtifactRef: nginx
+                          sources: <+input>
+  description: Build pipeline for payments-api
+  tags: {}
+  projectIdentifier: Cassie_Sandbox
+  orgIdentifier: SE_Sandbox
