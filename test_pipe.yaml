@@ -23,7 +23,9 @@ pipeline:
                     source:
                       type: Inline
                       spec:
-                        script: echo "Hello world"
+                        script: |-
+                          echo "Hello world"
+                          kasdjksjvfs
                     environmentVariables: []
                     outputVariables: []
                   timeout: 10m
