@@ -1,13 +1,13 @@
 pipeline:
-  name: Terraform Test
-  identifier: Terraform_Test
-  projectIdentifier: Cassie_Sandbox
-  orgIdentifier: SE_Sandbox
+  name: test pipe
+  identifier: test_pipe
+  projectIdentifier: terraform_test_project
+  orgIdentifier: terraform_example_org
   tags: {}
   stages:
     - stage:
-        name: Hello world
-        identifier: Hello_world
+        name: Test
+        identifier: Test
         description: ""
         type: Custom
         spec:
@@ -15,8 +15,8 @@ pipeline:
             steps:
               - step:
                   type: ShellScript
-                  name: Echo Hello World
-                  identifier: Echo_Hello_World
+                  name: Shell Script_1
+                  identifier: ShellScript_1
                   spec:
                     shell: Bash
                     onDelegate: true
