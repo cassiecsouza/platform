@@ -1,8 +1,8 @@
 pipeline:
   name: test pipe
   identifier: test_pipe
-  projectIdentifier: Cassie_Sandbox
-  orgIdentifier: SE_Sandbox
+  projectIdentifier: terraform_test_project
+  orgIdentifier: terraform_example_org
   tags: {}
   stages:
     - stage:
