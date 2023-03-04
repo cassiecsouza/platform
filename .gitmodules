@@ -1,0 +1,9 @@
+[submodule "app3"]
+	path = app3
+	url = git@github.com:csouza-harness/app3.git
+[submodule "app1"]
+	path = app1
+	url = git@github.com:csouza-harness/app1.git
+[submodule "app2"]
+	path = app2
+	url = git@github.com:csouza-harness/app2.git
