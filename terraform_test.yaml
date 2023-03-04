@@ -23,7 +23,7 @@ pipeline:
                     source:
                       type: Inline
                       spec:
-                        script: echo "Hello world"
+                        script: echo "Hello world"sdfv
                     environmentVariables: []
                     outputVariables: []
                   timeout: 10m
