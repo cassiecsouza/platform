@@ -1,0 +1,91 @@
+pipeline:
+  name: Terraform Cloud
+  identifier: Terraform_Cloud
+  projectIdentifier: Demo
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: Provision Infrastructure
+        identifier: Provision_Infrastructure
+        description: ""
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: TerraformCloudRun
+                  name: Terraform Plan
+                  identifier: Terraform_Plan
+                  timeout: 10m
+                  spec:
+                    runType: Plan
+                    runMessage: Running a Terraform plan!
+                    spec:
+                      organization: harness-se
+                      workspace: ws-T5xn8RU6frHV9o8i
+                      variables: []
+                      discardPendingRuns: true
+                      targets: []
+                      connectorRef: personal_terraform_cloud
+                      planType: Apply
+                      provisionerIdentifier: se_demo
+                      exportTerraformPlanJson: true
+                      overridePolicies: false
+              - step:
+                  type: ShellScript
+                  name: Echo Terraform Plan
+                  identifier: Echo_Terraform_Plan
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    onDelegate: true
+                    source:
+                      type: Inline
+                      spec:
+                        script: echo <+execution.steps.Terraform_Plan.spec.spec.exportTerraformPlanJson>
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: HarnessApproval
+                  name: Approve Terraform Changes
+                  identifier: Approve_Terraform_Changes
+                  timeout: 1d
+                  spec:
+                    approvalMessage: TF Plan looks great - Let's go ahead and Apply the changes
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - _project_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                    approverInputs: []
+              - step:
+                  type: TerraformCloudRun
+                  name: Terraform Apply
+                  identifier: Terraform_Apply
+                  timeout: 10m
+                  spec:
+                    runType: Apply
+                    spec:
+                      provisionerIdentifier: se_demo
+              - step:
+                  type: TerraformCloudRun
+                  name: Terraform Destroy
+                  identifier: Terraform_Destroy
+                  when:
+                    stageStatus: All
+                  timeout: 10m
+                  spec:
+                    runType: PlanAndDestroy
+                    runMessage: Destroying resources created earlier in the pipeline
+                    spec:
+                      organization: harness-se
+                      workspace: ws-T5xn8RU6frHV9o8i
+                      variables: []
+                      discardPendingRuns: true
+                      targets: []
+                      connectorRef: personal_terraform_cloud
+                      provisionerIdentifier: se_demo
+        tags: {}
